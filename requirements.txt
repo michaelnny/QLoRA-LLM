@@ -1,0 +1,7 @@
+torch
+sentencepiece # tokenizer
+tqdm
+numpy
+bitsandbytes
+tensorboard
+torch_tb_profiler
