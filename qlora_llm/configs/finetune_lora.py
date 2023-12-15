@@ -71,9 +71,9 @@ class config:
     quant_4bit_type: str = 'nf4'  # only supports 'fp4' or 'nf4'
 
     # learning rate
-    init_lr: float = 1e-6  # initial learning rate
-    max_lr: float = 1e-5  # max learning rate after warm up
-    min_lr: float = 1e-6  # min learning rate after decay
+    init_lr: float = 2e-6  # initial learning rate
+    max_lr: float = 2e-5  # max learning rate after warm up
+    min_lr: float = 2e-6  # min learning rate after decay
     warmup_ratio: float = 0.05
 
     # prompt is lesser important than completion
