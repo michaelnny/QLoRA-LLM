@@ -5,9 +5,9 @@
 
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # This software may be used and distributed according to the terms of the Llama 2 Community License Agreement.
-
+import logging
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from typing import Any, Optional, Tuple, Iterable
 from typing_extensions import Self
 import numpy as np
@@ -15,10 +15,11 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+logger = logging.getLogger(__name__)
 
 # llama 2 models
 llama_configs = {
-    '3B': dict(n_layers=12, n_heads=32, dim=4096),
+    '3B': dict(n_layers=16, n_heads=32, dim=4096),  # for RM model
     '7B': dict(n_layers=32, n_heads=32, dim=4096),
     '13B': dict(n_layers=40, n_heads=40, dim=5120),
     '70B': dict(n_layers=80, n_heads=64, dim=8192),
@@ -44,12 +45,19 @@ class ModelArgs:
     max_batch_size: int = 8
     max_seq_len: int = 2048
 
+    head_type: str = 'lm_head'  # 'lm_head', 'scalar_head'
     use_cache: bool = False  # should only use cache when do inference
 
-    # used during training
+    # dropout regularization
     embed_dropout: float = 0.0
     attn_dropout: float = 0.0
     resid_dropout: float = 0.0
+
+    def __post_init__(self):
+        assert self.head_type in ('lm_head', 'scalar_head')
+
+    def dict(self):
+        return {k: str(v) if not isinstance(v, (float, int, bool, type(None))) else v for k, v in asdict(self).items()}
 
     @classmethod
     def from_model_type(cls, model_type: str, **kwargs) -> Self:
@@ -105,19 +113,19 @@ def apply_rotary_emb(
 
 
 class Attention(nn.Module):
-    def __init__(self, params: ModelArgs):
+    def __init__(self, args: ModelArgs):
         super().__init__()
-        self.max_batch_size = params.max_batch_size
-        self.max_seq_len = params.max_seq_len
-        self.n_heads = params.n_heads
-        self.head_dim = params.dim // params.n_heads
+        self.max_batch_size = args.max_batch_size
+        self.max_seq_len = args.max_seq_len
+        self.n_heads = args.n_heads
+        self.head_dim = args.dim // args.n_heads
 
-        self.wq = nn.Linear(params.dim, params.n_heads * self.head_dim, bias=False)
-        self.wk = nn.Linear(params.dim, self.n_heads * self.head_dim, bias=False)
-        self.wv = nn.Linear(params.dim, self.n_heads * self.head_dim, bias=False)
-        self.wo = nn.Linear(params.n_heads * self.head_dim, params.dim, bias=False)
+        self.wq = nn.Linear(args.dim, args.n_heads * self.head_dim, bias=False)
+        self.wk = nn.Linear(args.dim, self.n_heads * self.head_dim, bias=False)
+        self.wv = nn.Linear(args.dim, self.n_heads * self.head_dim, bias=False)
+        self.wo = nn.Linear(args.n_heads * self.head_dim, args.dim, bias=False)
 
-        self.use_cache = params.use_cache
+        self.use_cache = args.use_cache
 
         self.cache_k = None
         self.cache_v = None
@@ -140,8 +148,8 @@ class Attention(nn.Module):
             )
 
         # regularization
-        self.attn_dropout = nn.Dropout(params.attn_dropout) if params.attn_dropout > 0 else nn.Identity()
-        self.resid_dropout = nn.Dropout(params.resid_dropout) if params.resid_dropout > 0 else nn.Identity()
+        self.attn_dropout = nn.Dropout(args.attn_dropout) if args.attn_dropout > 0 else nn.Identity()
+        self.resid_dropout = nn.Dropout(args.resid_dropout) if args.resid_dropout > 0 else nn.Identity()
 
     def forward(
         self,
@@ -255,22 +263,22 @@ class FeedForward(nn.Module):
 
 
 class TransformerBlock(nn.Module):
-    def __init__(self, layer_id: int, params: ModelArgs):
+    def __init__(self, layer_id: int, args: ModelArgs):
         super().__init__()
-        self.n_heads = params.n_heads
-        self.dim = params.dim
-        self.head_dim = params.dim // params.n_heads
-        self.attention = Attention(params)
+        self.n_heads = args.n_heads
+        self.dim = args.dim
+        self.head_dim = args.dim // args.n_heads
+        self.attention = Attention(args)
         self.feed_forward = FeedForward(
-            dim=params.dim,
-            hidden_dim=4 * params.dim,
-            multiple_of=params.multiple_of,
-            ffn_dim_multiplier=params.ffn_dim_multiplier,
-            resid_dropout=params.resid_dropout,
+            dim=args.dim,
+            hidden_dim=4 * args.dim,
+            multiple_of=args.multiple_of,
+            ffn_dim_multiplier=args.ffn_dim_multiplier,
+            resid_dropout=args.resid_dropout,
         )
         self.layer_id = layer_id
-        self.attention_norm = RMSNorm(params.dim, eps=params.norm_eps)
-        self.ffn_norm = RMSNorm(params.dim, eps=params.norm_eps)
+        self.attention_norm = RMSNorm(args.dim, eps=args.norm_eps)
+        self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)
 
     def forward(
         self,
@@ -300,9 +308,24 @@ class Transformer(nn.Module):
 
         self.post_norm = RMSNorm(params.dim, eps=params.norm_eps)
 
-        self.lm_head = nn.Linear(params.dim, params.vocab_size, bias=False)
+        if self.params.head_type == 'lm_head':
+            logger.info('Creating LLaMA-2 model with LM head ...')
+            self.lm_head = nn.Linear(params.dim, params.vocab_size, bias=False)
+        elif self.params.head_type == 'scalar_head':
+            logger.info('Creating LLaMA-2 model with scalar head ...')
+            self.scalar_head = nn.Linear(params.dim, 1, bias=True)
 
         self.freqs_cis = precompute_freqs_cis(self.params.dim // self.params.n_heads, self.params.max_seq_len * 2)
+
+    def disable_cache(self):
+        """When train the policy with RL, we want to use cache to speed up acting (generating training samples),
+        but use no cache when do learning. So we have disable_cache and enable_cache"""
+        for layer in self.layers:
+            layer.attention.disable_cache()
+
+    def enable_cache(self):
+        for layer in self.layers:
+            layer.attention.enable_cache()
 
     def forward(self, tokens: torch.Tensor, start_pos: Optional[int] = 0) -> torch.Tensor:
         _bsz, seqlen = tokens.shape
@@ -321,7 +344,12 @@ class Transformer(nn.Module):
             h = layer(h, start_pos, freqs_cis, mask)
         h = self.post_norm(h)
 
-        output = self.lm_head(h).float()
+        if self.params.head_type == 'lm_head':
+            output = self.lm_head(h).float()
+        elif self.params.head_type == 'scalar_head':
+            output = self.scalar_head(h).float()
+        else:
+            output = h
 
         return output
 

@@ -3,18 +3,23 @@
 # See the accompanying LICENSE file for details.
 
 
-from typing import Optional, Union, Dict, List, Mapping, Any, Type, Iterable
-
-from dataclasses import dataclass
+"""
+LLaMA model with LoRALiner layers
+"""
+import logging
 from functools import partial
+from dataclasses import dataclass
+from typing import Any, Optional, Union, Tuple, Iterable, Dict
 
+import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
+from torch import nn
 
 import qlora_llm.model as llama
 from qlora_llm.lora import LoRALinear, LoRALinear4bit, Linear4bit
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -203,7 +208,12 @@ class Transformer(llama.Transformer):
 
         self.post_norm = llama.RMSNorm(params.dim, eps=params.norm_eps)
 
-        # do not apply LoRA or quantize to the lm_head layer
-        self.lm_head = nn.Linear(params.dim, params.vocab_size, bias=False)
+        # do not apply LoRA or quantize to the lm_head or scalar_head layer
+        if self.params.head_type == 'lm_head':
+            logger.info('Creating LLaMA-2 model with LM head ...')
+            self.lm_head = nn.Linear(params.dim, params.vocab_size, bias=False)
+        elif self.params.head_type == 'scalar_head':
+            logger.info('Creating LLaMA-2 model with scalar head ...')
+            self.scalar_head = nn.Linear(params.dim, 1, bias=True)
 
         self.freqs_cis = llama.precompute_freqs_cis(self.params.dim // self.params.n_heads, self.params.max_seq_len * 2)

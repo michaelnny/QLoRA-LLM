@@ -55,7 +55,7 @@ def clear_gpu_cache():
     torch.cuda.empty_cache()
 
 
-def create_lora_checkpoint(model, save_file):
+def create_lora_checkpoint(model: Transformer, save_file: str):
     full_path = os.path.join(cfg.ckpt_dir, save_file)
     ckpt_state = lora_state_dict(model, train_bias=cfg.train_bias, train_head=cfg.train_head)
 
@@ -63,22 +63,11 @@ def create_lora_checkpoint(model, save_file):
     logger.info(f'LoRA model checkpoint saved at {full_path!r}')
 
     # save LoRA configuration params so we can re-create the same model after training, which is required to merge weights
-    meta_file = os.path.join(cfg.ckpt_dir, 'lora_params.json')
+    meta_file = os.path.join(cfg.ckpt_dir, 'params.json')
     if not os.path.exists(meta_file):
-        meta = {
-            'lora_r': cfg.lora_r,
-            'lora_scaling': cfg.lora_scaling,
-            'lora_dropout': cfg.lora_dropout,
-            'lora_attn_query': cfg.lora_attn_query,
-            'lora_attn_key': cfg.lora_attn_key,
-            'lora_attn_value': cfg.lora_attn_value,
-            'lora_attn_proj': cfg.lora_attn_proj,
-            'lora_attn_mlp': cfg.lora_attn_mlp,
-        }
         with open(meta_file, 'w', encoding='utf-8') as f:
-            json.dump(meta, f, indent=2)
-
-        logger.info(f'LoRA model params saved at {meta_file!r}')
+            json.dump(model.params.dict(), f, indent=2)
+        logger.info(f'Model meta params saved at {meta_file!r}')
 
 
 def compute_finetune_loss(logits: torch.Tensor, targets: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:

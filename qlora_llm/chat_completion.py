@@ -20,7 +20,7 @@ from qlora_llm.generation import Llama
 
 
 def main(
-    ckpt_dir: str,
+    ckpt_path: str,
     tokenizer_path: str,
     temperature: float = 0.6,
     top_p: float = 0.9,
@@ -29,7 +29,7 @@ def main(
     max_gen_len: Optional[int] = None,
 ):
     generator = Llama.build(
-        ckpt_dir=ckpt_dir,
+        ckpt_path=ckpt_path,
         tokenizer_path=tokenizer_path,
         max_seq_len=max_seq_len,
         max_batch_size=max_batch_size,
@@ -111,7 +111,7 @@ These are just a few of the many attractions that Paris has to offer. With so mu
 
 if __name__ == '__main__':
     main(
-        # ckpt_dir="./meta_checkpoints/llama-2-7b-chat",  # Meta fine-tuned chat model
-        ckpt_dir='./merged_checkpoints/7b-finetune',  # our fine-tuned model
+        # ckpt_path="./meta_checkpoints/llama-2-7b-chat/consolidated.pth",  # Meta fine-tuned chat model
+        ckpt_path='./merged_checkpoints/7b-finetune/iter-400-merged.pth',  # our fine-tuned model
         tokenizer_path='./meta_checkpoints/tokenizer.model',
     )

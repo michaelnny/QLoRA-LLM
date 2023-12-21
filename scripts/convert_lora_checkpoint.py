@@ -46,35 +46,37 @@ def convert_model_to_dtype(model: torch.nn.Module, dtype) -> None:
 
 
 def merge_lora_checkpoint(
-    model_type: str, lora_ckpt_path: str, base_ckpt_dir: str, save_path: str, dtype=torch.bfloat16
+    base_ckpt_path: str,
+    lora_ckpt_path: str,
+    save_path: str,
+    dtype=torch.bfloat16,
 ) -> None:
     """Merges LoRA weights with pretrained base model.
 
     Args:
-        model_type: The llama-2 model type, supports 'gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl'.
+        base_ckpt_path: The base checkpoint (like pre-trained or fine-tuned) used for training with lora.
         lora_ckpt_path: Path to the checkpoint with trained LoRA weights, which are the output of
             `finetune_lora.py`.
-        base_ckpt_dir: The base checkpoint (like pre-trained or fine-tuned) used for training with lora.
         save_path: target path to save the merged stat_dict.
-
+        dtype: save model weights and biases in the given target data type, default torch.bfloat16.
     """
 
     if not os.path.exists(lora_ckpt_path):
-        raise ValueError(f'LoRA checkpoint file {lora_ckpt_path!r} does not exist, aborting...')
-    if not os.path.exists(base_ckpt_dir):
-        raise ValueError(f'Pretrained checkpoint dir {base_ckpt_dir!r} does not exist, aborting...')
+        raise ValueError(f'LoRA checkpoint file {lora_ckpt_path!r} does not exist, aborting ...')
+    if not os.path.exists(base_ckpt_path):
+        raise ValueError(f'Pretrained checkpoint dir {base_ckpt_path!r} does not exist, aborting ...')
 
     if os.path.exists(save_path):
-        print(f'The checkpoint file {save_path!r} already exists, aborting...')
+        print(f'The checkpoint file {save_path!r} already exists, aborting ...')
         return
 
     # try to get lora_params.json file based on the lora_ckpt_path
     lora_dir = os.path.dirname(lora_ckpt_path)
 
     # Create the path to the JSON file based on the directory
-    lora_params_path = os.path.join(lora_dir, 'lora_params.json')
-    if not os.path.exists(lora_params_path):
-        print(f'Can not find LoRA params file {lora_params_path!r}, aborting...')
+    params_path = os.path.join(lora_dir, 'params.json')
+    if not os.path.exists(params_path):
+        print(f'Can not find model params file {params_path!r}, aborting ...')
         return
 
     output_dir = os.path.dirname(save_path)
@@ -82,30 +84,20 @@ def merge_lora_checkpoint(
         # Create the output directory if necessary
         os.makedirs(output_dir, mode=0o777, exist_ok=True)
 
-    print('Loading model checkpoints ...')
+    print(f'Loading base model checkpoints {base_ckpt_path!r}...')
+    base_checkpoint = torch.load(base_ckpt_path)
 
-    # try to find and load pre-trained and lora checkpoints
-    checkpoints = sorted(Path(base_ckpt_dir).glob('*.pth'))
-    assert len(checkpoints) == 1, f'no checkpoint files found in {base_ckpt_dir!r}'
-    pretrained_ckpt_file = checkpoints[0]
-
-    pretrained_checkpoint = torch.load(pretrained_ckpt_file)
+    print(f'Loading LoRA model checkpoints {lora_ckpt_path!r}...')
     lora_checkpoint = torch.load(lora_ckpt_path)
 
-    with open(lora_params_path, 'r') as f:
-        lora_params = json.load(f)
+    with open(params_path, 'r') as f:
+        meta_params = json.load(f)
 
-    model_args = LoraModelArgs.from_model_type(
-        model_type=model_type,
-        # LoRA configurations
-        lora_r=lora_params['lora_r'],
-        lora_scaling=lora_params['lora_scaling'],
-        # LoRA trainable layers
-        lora_attn_query=lora_params['lora_attn_query'],
-        lora_attn_key=lora_params['lora_attn_key'],
-        lora_attn_value=lora_params['lora_attn_value'],
-        lora_attn_proj=lora_params['lora_attn_proj'],
-        lora_attn_mlp=lora_params['lora_attn_mlp'],
+        del meta_params['quant_4bit']
+        del meta_params['quant_lora_4bit']
+
+    model_args = LoraModelArgs(
+        **meta_params,
         # No quantization during merge weights
         quant_4bit=False,
         quant_lora_4bit=False,
@@ -114,12 +106,12 @@ def merge_lora_checkpoint(
     model = Transformer(model_args)
 
     # 1. Load the pretrained weights
-    model.load_state_dict(pretrained_checkpoint, strict=False)
+    model.load_state_dict(base_checkpoint, strict=False)
 
     # 2. Load the fine-tuned lora weights
     model.load_state_dict(lora_checkpoint, strict=False)
 
-    # 3. Merge LoRA weights, this is handled inside the LoraLinear.train() method
+    # 3. merge LoRA weights, which was handled inside the LoRALinear.train() method
     model.eval()
 
     # 4. optional, convert to bfloat16
@@ -131,15 +123,21 @@ def merge_lora_checkpoint(
     print(f'Saving merged model weights to {save_path!r} ...')
     torch.save(state_dict, save_path)
 
-    print(f'Copying params.json to {output_dir!r}...')
-    shutil.copy(os.path.join(base_ckpt_dir, 'params.json'), output_dir)
+    meta_file = os.path.join(output_dir, 'params.json')
+    if not os.path.exists(meta_file):
+        del_keys = ('lora', 'quant', 'dropout')
+        meta = model.params.dict()
+        meta = {k: v for k, v in meta.items() if all([n not in k for n in del_keys])}
+
+        print(f'Saving model metadata to {meta_file!r} ...')
+        with open(meta_file, 'w', encoding='utf-8') as f:
+            json.dump(meta, f, indent=2)
 
 
 if __name__ == '__main__':
     # fine-tuned model
     merge_lora_checkpoint(
-        model_type='7B',
+        base_ckpt_path='./meta_checkpoints/llama-2-7b/consolidated.pth',
         lora_ckpt_path='./checkpoints/finetune_lora-4bit/lora_7B-iter-400.pth',
-        base_ckpt_dir='./meta_checkpoints/llama-2-7b/',
         save_path='./merged_checkpoints/7b-finetune/iter-400-merged.pth',
     )

@@ -37,63 +37,54 @@ from qlora_llm.utils.prompt_builder import (
 class Llama:
     @staticmethod
     def build(
-        ckpt_dir: str,
+        ckpt_path: str,
         tokenizer_path: str,
         max_seq_len: int,
         max_batch_size: int,
         device: str,
         seed: int = 1,
     ) -> 'Llama':
-        """
-        Build a Llama instance by initializing and loading a pre-trained model.
+        if not os.path.exists(ckpt_path):
+            raise ValueError(f'Checkpoint file {ckpt_path!r} does not exist, aborting ...')
+        ckpt_dir = os.path.dirname(ckpt_path)
 
-        Args:
-            ckpt_dir (str): Path to the directory containing checkpoint files.
-            tokenizer_path (str): Path to the tokenizer file.
-            max_seq_len (int): Maximum sequence length for input text.
-            max_batch_size (int): Maximum batch size for inference.
+        params_path = os.path.join(ckpt_dir, 'params.json')
+        if not os.path.exists(params_path):
+            raise ValueError(f'Can not find model metadata file {params_path!r}, aborting ...')
 
-        Returns:
-            Llama: An instance of the Llama class with the loaded model and tokenizer.
+        print(f'Starting to load model checkpoints {ckpt_path!r} ...')
 
-        Raises:
-            AssertionError: If there are no checkpoint files in the specified directory,
-                or if the model parallel size does not match the number of checkpoint files.
-
-        Note:
-            This method initializes the distributed process group, sets the device to CUDA,
-            and loads the pre-trained model and tokenizer.
-
-        """
-
-        print('Starting to load model and tokenizer checkpoints...')
-        torch.set_default_device(device)
-
-        # seed must be the same in all processes
         torch.manual_seed(seed)
+        torch.set_default_device(device)
+        torch.set_default_dtype(torch.float16)
 
-        start_time = time.time()
-        checkpoints = sorted(Path(ckpt_dir).glob('*.pth'))
-        assert len(checkpoints) == 1, f'no checkpoint files found in {ckpt_dir}'
-
-        ckpt_path = checkpoints[0]
+        t0 = time.time()
         checkpoint = torch.load(ckpt_path, map_location='cpu')
-        with open(Path(ckpt_dir) / 'params.json', 'r') as f:
+        with open(params_path, 'r') as f:
             params = json.loads(f.read())
 
+        try:
+            del params['max_seq_len']
+            del params['max_batch_size']
+            del params['use_cache']
+        except Exception:
+            pass
+
         model_args: ModelArgs = ModelArgs(
+            **params,
             max_seq_len=max_seq_len,
             max_batch_size=max_batch_size,
             use_cache=True,
-            **params,
         )
-        tokenizer = Tokenizer(model_path=tokenizer_path)
-        model_args.vocab_size = tokenizer.vocab_size
 
-        torch.set_default_dtype(torch.bfloat16)
         model = Transformer(model_args)
         model.load_state_dict(checkpoint, strict=False)
-        print(f'Loaded in {time.time() - start_time:.2f} seconds')
+
+        print(f'Model checkpoint loaded in {time.time() - t0:.2f} seconds')
+
+        print(f'Starting to load tokenizer checkpoint {tokenizer_path!r} ...')
+        tokenizer = Tokenizer(model_path=tokenizer_path)
+        model_args.vocab_size = tokenizer.vocab_size
 
         for params in model.parameters():
             params.requires_grad = False

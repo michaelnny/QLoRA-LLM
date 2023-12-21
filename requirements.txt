@@ -1,7 +1,7 @@
-torch
+torch>=2.0.0
 sentencepiece # tokenizer
 tqdm
 numpy
-bitsandbytes
+bitsandbytes==0.41.3 # 4bit quantization
 tensorboard
 torch_tb_profiler

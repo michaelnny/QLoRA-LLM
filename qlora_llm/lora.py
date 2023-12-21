@@ -62,8 +62,6 @@ os.environ['BITSANDBYTES_NOWELCOME'] = '1'
 warnings.filterwarnings('ignore', message=r'.*bitsandbytes was compiled without GPU support.*')
 warnings.filterwarnings('ignore', message=r'MatMul8bitLt: inputs will be cast from .* to float16 during quantization')
 import bitsandbytes as bnb
-from bitsandbytes.nn import Linear4bit, Params4bit
-from bitsandbytes.functional import quantize_4bit, dequantize_4bit
 
 del os.environ['BITSANDBYTES_NOWELCOME']
 
@@ -180,6 +178,36 @@ class LoRALinear(nn.Linear, LoRALayer):
         return result
 
 
+class Params4bit(bnb.nn.Params4bit):
+    # as in bitsandbytes version 0.41.3, the original Params4bit has issue when moving model between CPU and GPU.
+    # for example, when we try to move a quantized layer to CPU, and later move back to GPU, the weights would stay on CPU
+    # https://github.com/TimDettmers/bitsandbytes/issues/902
+    def cuda(self, device):
+        if self.quant_state is not None:
+            if self.data.device != device:
+                self.data = self.data.to(device)
+                self.quant_state.to(device)
+            return self
+        w = self.data.contiguous().half().cuda(device)
+        w_4bit, quant_state = bnb.functional.quantize_4bit(
+            w, blocksize=self.blocksize, compress_statistics=self.compress_statistics, quant_type=self.quant_type
+        )
+        self.data = w_4bit
+        self.quant_state = quant_state
+        return self
+
+
+class Linear4bit(bnb.nn.Linear4bit):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.weight = Params4bit(
+            self.weight.data,
+            requires_grad=False,
+            compress_statistics=self.weight.compress_statistics,
+            quant_type=self.weight.quant_type,
+        )
+
+
 class LoRALinear4bit(Linear4bit, LoRALayer):
     def __init__(
         self,
@@ -242,7 +270,7 @@ class LoRALinear4bit(Linear4bit, LoRALayer):
     #                 # dequantize so we can un-merge LoRA weights
     #                 weight = self.weight
     #                 kwargs = weight.__dict__
-    #                 w_data = dequantize_4bit(weight.data.clone(), weight.quant_state)
+    #                 w_data = bnb.functional.dequantize_4bit(weight.data.clone(), weight.quant_state)
 
     #                 if not torch.isfinite(w_data).all():
     #                     raise ValueError("NaNs detected in the merged weights. The QLoRA layer seems to be broken")
@@ -265,7 +293,7 @@ class LoRALinear4bit(Linear4bit, LoRALayer):
     #                 weight = self.weight
     #                 kwargs = weight.__dict__
 
-    #                 w_data = dequantize_4bit(weight.data.clone(), weight.quant_state)
+    #                 w_data = bnb.functional.dequantize_4bit(weight.data.clone(), weight.quant_state)
     #                 if not torch.isfinite(w_data).all():
     #                     raise ValueError("NaNs detected in the merged weights. The QLoRA layer seems to be broken")
 
@@ -391,7 +419,9 @@ def lora_state_dict_from_full_state_dict(
         }
     elif train_bias == 'all':
         return {
-            k: state_dict[k] for k in state_dict if 'lora_' in k or 'bias' in k or ('reward_mean' in k or 'reward_var' in k)
+            k: state_dict[k]
+            for k in state_dict
+            if 'lora_' in k or 'bias' in k or (train_head and any((h_name in k for h_name in head_layers)))
         }
     elif train_bias == 'lora_only':
         to_return = {}
