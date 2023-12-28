@@ -39,14 +39,14 @@ class config:
     full_pad: bool = False
 
     # training and validation loops
-    num_epochs: int = 2
+    num_epochs: int = 1
     # accumulate gradients so the actual batch size is = micro_batch_size x gradient_accum_steps
-    micro_batch_size: int = 2
+    micro_batch_size: int = 1
     gradient_accum_steps: int = 30
     val_interval: int = 100
     val_batch_size: int = 30
     val_iters: int = 20
-    log_interval: int = 10  # log training metrics (loss, accuracy)
+    log_interval: int = 5  # log training metrics (loss, accuracy)
     ckpt_interval: int = 200  # save model checkpoints every N training iterations
 
     # LoRA configuration
@@ -56,10 +56,10 @@ class config:
 
     # LoRA trainable layers
     lora_attn_query: bool = True  # train Attention query layer
-    lora_attn_key: bool = True  # train Attention key layer
+    lora_attn_key: bool = False  # train Attention key layer
     lora_attn_value: bool = True  # train Attention value layer
-    lora_attn_proj: bool = True  # train Attention projection layer
-    lora_attn_mlp: bool = True  # train Attention MLP block
+    lora_attn_proj: bool = False  # train Attention projection layer
+    lora_attn_mlp: bool = False  # train Attention MLP block
 
     train_bias: str = 'none'  # none, lora_only, all
     train_head: bool = True  # do not apply LoRA or quantize to the lm_head layer
@@ -72,7 +72,7 @@ class config:
 
     # learning rate
     init_lr: float = 2e-6  # initial learning rate
-    max_lr: float = 2e-5  # max learning rate after warm up
+    max_lr: float = 8e-6  # max learning rate after warm up
     min_lr: float = 2e-6  # min learning rate after decay
     warmup_ratio: float = 0.05
 
@@ -88,12 +88,12 @@ class config:
 
     # dropout regularization
     embed_dropout: float = 0.0
-    attn_dropout: float = 0.1
-    resid_dropout: float = 0.1
+    attn_dropout: float = 0.0
+    resid_dropout: float = 0.0
 
     # others
     seed: int = 127
-    log_dir: str = './logs/finetune_lora-4bit'  # save logs and traces
-    ckpt_dir: str = './checkpoints/finetune_lora-4bit'
+    log_dir: str = './logs/finetune_lora-4bit-all'  # save logs and traces
+    ckpt_dir: str = './checkpoints/finetune_lora-4bit-all'
     use_tensorboard: bool = True
     use_profiler: bool = False  # use torch profiler to monitoring traces, be careful as the logs will grow very fast

@@ -2,6 +2,8 @@
 
 Uses QLoRA for fine-tuning a language model (LLM) with basic tools such as PyTorch and Bitsandbytes, without any Hugging Face tools.
 
+Check the [article post](https://michaelnny.github.io/blog/QLoRA-LLM) on the discussion of the project.
+
 # Motivation and Objective
 
 We commonly use LoRA to fine-tune a large language model (LLM), and can further reduce GPU memory requirements by approximately 30% with QLoRA. Many projects recommend using the PEFT library from Hugging Face for QLoRA fine-tuning.
@@ -130,6 +132,9 @@ class Params4bit(torch.nn.Parameter):
 
   def cuda(self, device):
     if self.quant_state is not None:
+        if self.data.device != device:
+            self.data = self.data.to(device)
+            self.quant_state.to(device)
         return self
     w = self.data.contiguous().half().cuda(device)
     w_4bit, quant_state = bnb.functional.quantize_4bit(w, blocksize=self.blocksize, compress_statistics=self.compress_statistics, quant_type=self.quant_type)
