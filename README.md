@@ -1,8 +1,8 @@
 # QLoRA-LLM
 
-Uses QLoRA for fine-tuning a language model (LLM) with basic tools such as PyTorch and Bitsandbytes, without any Hugging Face tools.
+A simple custom QLoRA implementation for fine-tuning a language model (LLM) with basic tools such as PyTorch and Bitsandbytes, completely decoupled from Hugging Face.
 
-Check the [article post](https://michaelnny.github.io/blog/QLoRA-LLM) on the discussion of the project.
+Check the [article post](https://www.vectortheta.com/blog/QLoRA-LLM) on the discussion of the project.
 
 # Motivation and Objective
 
