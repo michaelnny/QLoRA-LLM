@@ -21,7 +21,7 @@ wd = Path(__file__).parent.parent.resolve()
 sys.path.append(str(wd))
 
 
-from qlora_llm.model import Transformer, ModelArgs
+from qlora_llm.models.model import Transformer, ModelArgs
 
 
 def convert_state_dict(state_dict: Dict[str, torch.Tensor], dtype: torch.dtype = torch.bfloat16) -> Dict[str, torch.Tensor]:
@@ -116,9 +116,7 @@ def convert_meta_weights(
     n_checkpoints = len(checkpoint_files)
 
     if n_checkpoints == 0:
-        raise RuntimeError(
-            f'No checkpoints were found at checkpoint root dir {model_ckpt_dir}. `consolidated.0*.pth` files expected at that location.'
-        )
+        raise RuntimeError(f'No checkpoints were found at checkpoint root dir {model_ckpt_dir}. `consolidated.0*.pth` files expected at that location.')
 
     print(f'Found {n_checkpoints} checkpoint shards, will merge these into a single checkpoint...')
 

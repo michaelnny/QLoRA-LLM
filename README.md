@@ -168,6 +168,8 @@ Additionally, we can monitor the progress using TensorBoard.
 tensorboard --logdir=./logs
 ```
 
+_Note, to save compute, we limit the number of training samples to 5000 in the experiment._
+
 ![QLoRA LLaMA 7b Tensorboard](/images/qlora_llama_7b.png)
 
 ## Merge LoRA weights

@@ -13,11 +13,11 @@ from typing import Tuple, List, Mapping, Text, Literal, Optional, TypedDict
 from pathlib import Path
 import sys
 
-wd = Path(__file__).parent.parent.resolve()
+wd = Path(__file__).parent.parent.parent.resolve()
 sys.path.append(str(wd))
 
 
-from qlora_llm.tokenizer import Tokenizer
+from qlora_llm.models.tokenizer import Tokenizer
 
 Role = Literal['system', 'user', 'assistant']
 
@@ -78,13 +78,8 @@ def build_prompt_completion(dialog: Dialog, tokenizer: Tokenizer) -> Tuple[List[
     assert len(dialog) >= 2
 
     assert (
-        dialog[0]['role'] == 'system'
-        and all([msg['role'] == 'user' for msg in dialog[1::2]])
-        and all([msg['role'] == 'assistant' for msg in dialog[2::2]])
-    ), (
-        "model only supports 'system', 'user' and 'assistant' roles, "
-        "starting with 'system', then 'user' and alternating (u/a/u/a/u...)"
-    )
+        dialog[0]['role'] == 'system' and all([msg['role'] == 'user' for msg in dialog[1::2]]) and all([msg['role'] == 'assistant' for msg in dialog[2::2]])
+    ), ("model only supports 'system', 'user' and 'assistant' roles, " "starting with 'system', then 'user' and alternating (u/a/u/a/u...)")
 
     # store user-prompt:answer pairs so we can later add BOS, EOS tokens to each pair
     prompts = []

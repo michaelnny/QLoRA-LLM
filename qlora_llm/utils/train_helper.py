@@ -10,13 +10,6 @@ from torch import nn
 import torch.distributed as dist
 import bitsandbytes as bnb
 
-# support running without installing as a package
-from pathlib import Path
-import sys
-
-wd = Path(__file__).parent.parent.resolve()
-sys.path.append(str(wd))
-
 
 def create_trace_profiler(tb_trace_dir: str) -> torch.profiler.profile:
     torch_profiler = torch.profiler.profile(

@@ -20,7 +20,7 @@ wd = Path(__file__).parent.parent.resolve()
 sys.path.append(str(wd))
 
 
-from qlora_llm.model_lora import Transformer, LoraModelArgs
+from qlora_llm.models.model_lora import Transformer, LoraModelArgs
 from qlora_llm.configs.finetune_lora import config as cfg
 
 

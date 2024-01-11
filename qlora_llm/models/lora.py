@@ -388,9 +388,7 @@ def lora_state_dict(model: nn.Module, train_bias: str = 'none', train_head: bool
     return lora_state_dict_from_full_state_dict(state_dict, train_bias, train_head)
 
 
-def lora_state_dict_from_full_state_dict(
-    state_dict: dict, train_bias: str = 'none', train_head: bool = False
-) -> Dict[str, torch.Tensor]:
+def lora_state_dict_from_full_state_dict(state_dict: dict, train_bias: str = 'none', train_head: bool = False) -> Dict[str, torch.Tensor]:
     """Return state_dict with weights of LoRA's A and B matrices and with biases depending on the `bias` value.
 
     Args:
@@ -412,17 +410,9 @@ def lora_state_dict_from_full_state_dict(
         raise NotImplementedError
 
     if train_bias == 'none':
-        return {
-            k: state_dict[k]
-            for k in state_dict
-            if 'lora_' in k or (train_head and any((h_name in k for h_name in head_layers)))
-        }
+        return {k: state_dict[k] for k in state_dict if 'lora_' in k or (train_head and any((h_name in k for h_name in head_layers)))}
     elif train_bias == 'all':
-        return {
-            k: state_dict[k]
-            for k in state_dict
-            if 'lora_' in k or 'bias' in k or (train_head and any((h_name in k for h_name in head_layers)))
-        }
+        return {k: state_dict[k] for k in state_dict if 'lora_' in k or 'bias' in k or (train_head and any((h_name in k for h_name in head_layers)))}
     elif train_bias == 'lora_only':
         to_return = {}
         for k in state_dict:

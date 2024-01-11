@@ -26,8 +26,8 @@ wd = Path(__file__).parent.parent.resolve()
 sys.path.append(str(wd))
 
 
-from qlora_llm.tokenizer import Tokenizer
-from qlora_llm.utils.logging import create_logger
+from qlora_llm.models.tokenizer import Tokenizer
+from qlora_llm.utils.logger import create_logger
 from qlora_llm.utils.file_helper import find_certain_files_under_dir, read_json_file, read_jsonl_file, count_words
 from qlora_llm.utils.prompt_builder import build_prompt_completion, Dialog
 
@@ -118,9 +118,7 @@ def _raw_texts_to_dialog(dialog_texts: List[str]) -> Dialog:
 
     assert len(dialog_texts) % 2 == 0, f'dialog length: {len(dialog_texts)}'
 
-    dialog = DEFAULT_DIALOG + [
-        {'role': 'user' if i % 2 == 0 else 'assistant', 'content': raw_text.strip()} for i, raw_text in enumerate(dialog_texts)
-    ]
+    dialog = DEFAULT_DIALOG + [{'role': 'user' if i % 2 == 0 else 'assistant', 'content': raw_text.strip()} for i, raw_text in enumerate(dialog_texts)]
 
     return dialog
 
@@ -157,9 +155,7 @@ def process_dolly_dataset(
     meta_output_file = os.path.join(output_dir, 'meta.json')
 
     if any(os.path.exists(f) for f in (train_output_file, val_output_file, meta_output_file)) and not overwrite_output:
-        logger.error(
-            f'The output files "{train_output_file}", "{val_output_file}", "{meta_output_file}" already exists, aborting...'
-        )
+        logger.error(f'The output files "{train_output_file}", "{val_output_file}", "{meta_output_file}" already exists, aborting...')
         return
 
     if metadata is None:
@@ -248,9 +244,7 @@ def process_alpaca_dataset(
     meta_output_file = os.path.join(output_dir, 'meta.json')
 
     if any(os.path.exists(f) for f in (train_output_file, val_output_file, meta_output_file)) and not overwrite_output:
-        logger.error(
-            f'The output files "{train_output_file}", "{val_output_file}", "{meta_output_file}" already exists, aborting...'
-        )
+        logger.error(f'The output files "{train_output_file}", "{val_output_file}", "{meta_output_file}" already exists, aborting...')
         return
 
     if metadata is None:
@@ -363,9 +357,7 @@ def process_deepmind_math_dataset(
     meta_output_file = os.path.join(output_dir, 'meta.json')
 
     if any(os.path.exists(f) for f in (train_output_file, val_output_file, meta_output_file)) and not overwrite_output:
-        logger.error(
-            f'The output files "{train_output_file}", "{val_output_file}", "{meta_output_file}" already exists, aborting...'
-        )
+        logger.error(f'The output files "{train_output_file}", "{val_output_file}", "{meta_output_file}" already exists, aborting...')
         return
 
     if metadata is None:
@@ -447,9 +439,7 @@ def process_squad_dataset(
     meta_output_file = os.path.join(output_dir, 'meta.json')
 
     if any(os.path.exists(f) for f in (train_output_file, val_output_file, meta_output_file)) and not overwrite_output:
-        logger.error(
-            f'The output files "{train_output_file}", "{val_output_file}", "{meta_output_file}" already exists, aborting...'
-        )
+        logger.error(f'The output files "{train_output_file}", "{val_output_file}", "{meta_output_file}" already exists, aborting...')
         return
 
     if metadata is None:
@@ -555,9 +545,7 @@ def process_commonsense_dialog_dataset(
     meta_output_file = os.path.join(output_dir, 'meta.json')
 
     if any(os.path.exists(f) for f in (train_output_file, val_output_file, meta_output_file)) and not overwrite_output:
-        logger.error(
-            f'The output files "{train_output_file}", "{val_output_file}", "{meta_output_file}" already exists, aborting...'
-        )
+        logger.error(f'The output files "{train_output_file}", "{val_output_file}", "{meta_output_file}" already exists, aborting...')
         return
 
     if metadata is None:
@@ -652,9 +640,7 @@ def process_msc_dialog_dataset(
     meta_output_file = os.path.join(output_dir, 'meta.json')
 
     if any(os.path.exists(f) for f in (train_output_file, val_output_file, meta_output_file)) and not overwrite_output:
-        logger.error(
-            f'The output files "{train_output_file}", "{val_output_file}", "{meta_output_file}" already exists, aborting...'
-        )
+        logger.error(f'The output files "{train_output_file}", "{val_output_file}", "{meta_output_file}" already exists, aborting...')
         return
 
     if metadata is None:
@@ -704,16 +690,10 @@ def process_msc_dialog_dataset(
 
             assert first_id != second_id
 
-            if not (
-                all([msg['id'] == first_id for msg in conversation[0::2]])
-                and all([msg['id'] == second_id for msg in conversation[1::2]])
-            ):
+            if not (all([msg['id'] == first_id for msg in conversation[0::2]]) and all([msg['id'] == second_id for msg in conversation[1::2]])):
                 continue
 
-            dialog = DEFAULT_DIALOG + [
-                {'role': 'user' if i % 2 == 0 else 'assistant', 'content': item['text'].strip()}
-                for i, item in enumerate(conversation)
-            ]
+            dialog = DEFAULT_DIALOG + [{'role': 'user' if i % 2 == 0 else 'assistant', 'content': item['text'].strip()} for i, item in enumerate(conversation)]
 
             if random.random() > 0.8:
                 logger.info(dialog)

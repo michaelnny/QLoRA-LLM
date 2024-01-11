@@ -23,8 +23,8 @@ wd = Path(__file__).parent.parent.resolve()
 sys.path.append(str(wd))
 
 
-from qlora_llm.model import ModelArgs, Transformer
-from qlora_llm.tokenizer import Tokenizer
+from qlora_llm.models.model import ModelArgs, Transformer
+from qlora_llm.models.tokenizer import Tokenizer
 from qlora_llm.utils.prompt_builder import (
     Message,
     Dialog,
