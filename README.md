@@ -22,8 +22,6 @@ Given these considerations, we decided to implement QLoRA fine-tuning for LLM us
 
 **Bug Reporting and Contributions:** Rigorous testing has been conducted in specific scenarios, but we cannot guarantee it's bug-free. Bug reports and pull requests are highly encouraged and welcomed.
 
-**Optimization:** For simplicity, we only focus on QLoRA and neglect other technics. For example, we can also extend the project by using gradient checkpointing to further reduce GPU RAM usage.
-
 # Environment and Requirements
 
 - Python 3.10.6

@@ -304,6 +304,7 @@ def main():
         embed_dropout=cfg.embed_dropout,
         attn_dropout=cfg.attn_dropout,
         resid_dropout=cfg.resid_dropout,
+        gradient_checkpointing=cfg.gradient_checkpointing,
     )
 
     model = Transformer(model_args)

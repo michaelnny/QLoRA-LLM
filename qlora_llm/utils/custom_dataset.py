@@ -39,9 +39,8 @@ class FineTuneDataset(Dataset):
                 if seq_length <= self.max_seq_len:
                     self.data.append((x, y))
 
-        self.shuffle()
-
         if self.max_samples > 0 and len(self.data) > self.max_samples:
+            random.shuffle(self.data)
             self.data = self.data[: self.max_samples]
 
         seq_length_stats = []  # track statistics
@@ -63,11 +62,7 @@ class FineTuneDataset(Dataset):
 
     def __getitem__(self, idx):
         x, y = self.data[idx]
-
         return torch.tensor(x, dtype=torch.long), torch.tensor(y, dtype=torch.long)
-
-    def shuffle(self):
-        random.shuffle(self.data)
 
     def get_metadata(self):
         return {

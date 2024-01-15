@@ -67,8 +67,8 @@ class config:
     train_head: bool = True  # do not apply LoRA or quantize to the lm_head layer
 
     # Quantization
-    quant_4bit: bool = True  # quantize frozen linear layer
-    quant_lora_4bit: bool = True  # quantize LoRA linear layer
+    quant_4bit: bool = False  # quantize frozen linear layer
+    quant_lora_4bit: bool = False  # quantize LoRA linear layer
     quant_4bit_double: bool = True  # double quantize
     quant_4bit_type: str = 'nf4'  # only supports 'fp4' or 'nf4'
 
@@ -93,9 +93,11 @@ class config:
     attn_dropout: float = 0.0
     resid_dropout: float = 0.0
 
+    gradient_checkpointing: bool = False
+
     # others
     seed: int = 127
-    log_dir: str = './logs/finetune_lora-4bit-all'  # save logs and traces
-    ckpt_dir: str = './checkpoints/finetune_lora-4bit-all'
+    log_dir: str = './logs/finetune_lora'  # save logs and traces
+    ckpt_dir: str = './checkpoints/finetune_lora'
     use_tensorboard: bool = True
     use_profiler: bool = False  # use torch profiler to monitoring traces, be careful as the logs will grow very fast
