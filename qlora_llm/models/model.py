@@ -153,7 +153,6 @@ class Attention(nn.Module):
 
         # regularization
         self.attn_dropout = nn.Dropout(args.attn_dropout) if args.attn_dropout > 0 else nn.Identity()
-        self.resid_dropout = nn.Dropout(args.resid_dropout) if args.resid_dropout > 0 else nn.Identity()
 
     def forward(
         self,
@@ -185,57 +184,19 @@ class Attention(nn.Module):
             keys = xk
             values = xv
 
-        xq = xq.transpose(1, 2)  # (bs, n_heads, seqlen, head_dim)
-        keys = keys.transpose(1, 2)
-        values = values.transpose(1, 2)
+        xq = xq.transpose(1, 2)  # (bs, n_heads, cache_len + seqlen, head_dim)
+        keys = keys.transpose(1, 2)  # (bs, n_heads, cache_len + seqlen, head_dim)
+        values = values.transpose(1, 2)  # (bs, n_heads, cache_len + seqlen, head_dim)
 
         scores = torch.matmul(xq, keys.transpose(2, 3)) / math.sqrt(self.head_dim)
         if mask is not None:
             scores = scores + mask  # (bs, n_heads, seqlen, cache_len + seqlen)
         scores = F.softmax(scores.float(), dim=-1).type_as(xq)
         scores = self.attn_dropout(scores)
-
         output = torch.matmul(scores, values)  # (bs, n_heads, seqlen, head_dim)
         output = output.transpose(1, 2).contiguous().view(bsz, seqlen, -1)
         output = self.wo(output)
-        output = self.resid_dropout(output)
         return output
-
-    def disable_cache(self):
-        """Set use cache to False, and remove the k, v cache tensors if already exists."""
-
-        self.use_cache = False
-
-        if self.cache_k is not None:
-            del self.cache_k
-            self.cache_k = None
-        if self.cache_v is not None:
-            del self.cache_v
-            self.cache_v = None
-
-    def enable_cache(self):
-        """Set use cache to True, and create the k, v cache tensors if not already exists."""
-
-        self.use_cache = True
-
-        if self.cache_k is None:
-            self.cache_k = torch.zeros(
-                (
-                    self.max_batch_size,
-                    self.max_seq_len,
-                    self.n_heads,
-                    self.head_dim,
-                )
-            )
-        if self.cache_v is None:
-            self.cache_v = torch.zeros(
-                (
-                    self.max_batch_size,
-                    self.max_seq_len,
-                    self.n_heads,
-                    self.head_dim,
-                )
-            )
 
 
 class FeedForward(nn.Module):
@@ -245,7 +206,6 @@ class FeedForward(nn.Module):
         hidden_dim: int,
         multiple_of: int,
         ffn_dim_multiplier: Optional[float],
-        resid_dropout: Optional[float] = 0.0,
     ):
         super().__init__()
         hidden_dim = int(2 * hidden_dim / 3)
@@ -258,11 +218,8 @@ class FeedForward(nn.Module):
         self.w2 = nn.Linear(hidden_dim, dim, bias=False)
         self.w3 = nn.Linear(dim, hidden_dim, bias=False)
 
-        self.resid_dropout = nn.Dropout(resid_dropout) if resid_dropout > 0 else nn.Identity()
-
     def forward(self, x):
         output = self.w2(F.silu(self.w1(x)) * self.w3(x))
-        output = self.resid_dropout(output)
         return output
 
 
@@ -278,11 +235,11 @@ class TransformerBlock(nn.Module):
             hidden_dim=4 * args.dim,
             multiple_of=args.multiple_of,
             ffn_dim_multiplier=args.ffn_dim_multiplier,
-            resid_dropout=args.resid_dropout,
         )
         self.layer_id = layer_id
         self.attention_norm = RMSNorm(args.dim, eps=args.norm_eps)
         self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)
+        self.resid_dropout = nn.Dropout(args.resid_dropout) if args.resid_dropout > 0 else nn.Identity()
 
     def forward(
         self,
@@ -293,6 +250,7 @@ class TransformerBlock(nn.Module):
     ):
         h = x + self.attention.forward(self.attention_norm(x), start_pos, freqs_cis, mask)
         out = h + self.feed_forward.forward(self.ffn_norm(h))
+        out = self.resid_dropout(out)
         return out
 
 
@@ -311,25 +269,9 @@ class Transformer(nn.Module):
             self.layers.append(TransformerBlock(layer_id, params))
 
         self.post_norm = RMSNorm(params.dim, eps=params.norm_eps)
-
-        if self.params.head_type == 'lm_head':
-            logger.info('Creating LLaMA-2 model with LM head ...')
-            self.lm_head = nn.Linear(params.dim, params.vocab_size, bias=False)
-        elif self.params.head_type == 'scalar_head':
-            logger.info('Creating LLaMA-2 model with scalar head ...')
-            self.scalar_head = nn.Linear(params.dim, 1, bias=True)
+        self.lm_head = nn.Linear(params.dim, params.vocab_size, bias=False)
 
         self.freqs_cis = precompute_freqs_cis(self.params.dim // self.params.n_heads, self.params.max_seq_len * 2)
-
-    def disable_cache(self):
-        """When train the policy with RL, we want to use cache to speed up acting (generating training samples),
-        but use no cache when do learning. So we have disable_cache and enable_cache"""
-        for layer in self.layers:
-            layer.attention.disable_cache()
-
-    def enable_cache(self):
-        for layer in self.layers:
-            layer.attention.enable_cache()
 
     def forward(self, tokens: torch.Tensor, start_pos: Optional[int] = 0) -> torch.Tensor:
         _bsz, seqlen = tokens.shape
@@ -341,23 +283,23 @@ class Transformer(nn.Module):
 
         mask = None
         if seqlen > 1:
-            mask = torch.full((1, 1, seqlen, seqlen), float('-inf'), device=tokens.device)
-            mask = torch.triu(mask, diagonal=start_pos + 1).type_as(h)
+            mask = torch.full((seqlen, seqlen), float('-inf'), device=tokens.device)
+            mask = torch.triu(mask, diagonal=1)
+
+            # When performing key-value caching, we compute the attention scores
+            # only for the new sequence. Thus, the matrix of scores is of size
+            # (seqlen, cache_len + seqlen), and the only masked entries are (i, j) for
+            # j > cache_len + i, since row i corresponds to token cache_len + i.
+            mask = torch.hstack([torch.zeros((seqlen, start_pos), device=tokens.device), mask]).type_as(h)
 
         for layer in self.layers:
             if self.params.gradient_checkpointing and self.training:
                 h = checkpoint(layer, h, start_pos, freqs_cis, mask, use_reentrant=False)
             else:
                 h = layer(h, start_pos, freqs_cis, mask)
+
         h = self.post_norm(h)
-
-        if self.params.head_type == 'lm_head':
-            output = self.lm_head(h).float()
-        elif self.params.head_type == 'scalar_head':
-            output = self.scalar_head(h).float()
-        else:
-            output = h
-
+        output = self.lm_head(h).float()
         return output
 
 
