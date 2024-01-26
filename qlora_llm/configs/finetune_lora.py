@@ -91,7 +91,6 @@ class config:
     # dropout regularization
     embed_dropout: float = 0.0
     attn_dropout: float = 0.0
-    resid_dropout: float = 0.0
 
     gradient_checkpointing: bool = False
 

@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 # llama 2 models
 llama_configs = {
-    '3B': dict(n_layers=16, n_heads=32, dim=4096),  # for RM model
     '7B': dict(n_layers=32, n_heads=32, dim=4096),
     '13B': dict(n_layers=40, n_heads=40, dim=5120),
     '70B': dict(n_layers=80, n_heads=64, dim=8192),
@@ -46,19 +45,14 @@ class ModelArgs:
     max_batch_size: int = 8
     max_seq_len: int = 2048
 
-    head_type: str = 'lm_head'  # 'lm_head', 'scalar_head'
     use_cache: bool = False  # should only use cache when do inference
 
     # dropout regularization
     embed_dropout: float = 0.0
     attn_dropout: float = 0.0
-    resid_dropout: float = 0.0
 
     # others
     gradient_checkpointing: bool = False
-
-    def __post_init__(self):
-        assert self.head_type in ('lm_head', 'scalar_head')
 
     def dict(self):
         return {k: str(v) if not isinstance(v, (float, int, bool, type(None))) else v for k, v in asdict(self).items()}
@@ -239,7 +233,6 @@ class TransformerBlock(nn.Module):
         self.layer_id = layer_id
         self.attention_norm = RMSNorm(args.dim, eps=args.norm_eps)
         self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)
-        self.resid_dropout = nn.Dropout(args.resid_dropout) if args.resid_dropout > 0 else nn.Identity()
 
     def forward(
         self,
@@ -250,7 +243,6 @@ class TransformerBlock(nn.Module):
     ):
         h = x + self.attention.forward(self.attention_norm(x), start_pos, freqs_cis, mask)
         out = h + self.feed_forward.forward(self.ffn_norm(h))
-        out = self.resid_dropout(out)
         return out
 
 
