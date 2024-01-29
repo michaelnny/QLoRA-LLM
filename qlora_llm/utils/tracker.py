@@ -4,47 +4,70 @@
 
 
 from typing import Dict
-import numpy as np
 
 import torch
 import torch.distributed as dist
 
 
-class StatsTracker:
-    """Tracker for LLM model during fine-tune"""
-
-    def __init__(self, distributed: bool = False, rank=0):
+class BaseTracker:
+    def __init__(
+        self,
+        distributed: bool = False,
+        rank: int = 0,
+    ):
+        assert rank >= 0
         self.distributed = distributed
         self.rank = rank
-
         self.reset()
 
-    def update(self, loss: torch.Tensor, num_accurate: int, num_samples: int):
-        metrics = self.metrics
+    def reset(self) -> None:
+        ...
 
-        metrics[0] += loss.item()  # sum up batch loss
-        metrics[1] += np.exp(loss.item())  # sum up perplexity
-        metrics[2] += 1  # increase number of micro batches
-        metrics[3] += num_accurate  # sum up number of accurate prediction tokens
-        metrics[4] += num_samples  # sum up number of tokens
+    def update(self, **args) -> None:
+        ...
 
-        self.c += 1
+    def get_dict(self, reset: bool) -> Dict:
+        return {}
+
+    def to_tensor(self, data) -> torch.Tensor:
+        return torch.tensor(data).to(f'cuda:{self.rank}' if self.distributed else 'cpu')
+
+    def reduce_tensor(self, data) -> None:
+        if self.distributed:
+            dist.all_reduce(data, op=dist.ReduceOp.SUM)
+
+
+class StatsTracker(BaseTracker):
+    """Tracker for LLM model during pre-training or fine-tuning stages"""
 
     def reset(self) -> None:
-        self.metrics = torch.zeros(5).to(f'cuda:{self.rank}' if self.distributed else 'cuda')
-        self.c = 0
+        self.losses = []
+        self.num_accurate = 0
+        self.num_samples = 0
 
-    def get_dict(self) -> Dict:
-        if self.c == 0:
+    def update(self, losses: torch.Tensor, num_accurate: int, num_samples: int) -> None:
+        assert len(losses.shape) == 1
+        self.losses.extend(losses.tolist())
+        self.num_accurate += num_accurate
+        self.num_samples += num_samples
+
+    def get_dict(self, reset: bool = False) -> Dict:
+        if len(self.losses) == 0:
             return {}
 
-        metrics = self.metrics
+        losses = self.to_tensor(self.losses)
+        num_accurate = self.to_tensor(self.num_accurate)
+        num_samples = self.to_tensor(self.num_samples)
 
-        if self.distributed:
-            dist.all_reduce(metrics, op=dist.ReduceOp.SUM)
+        self.reduce_tensor(losses)
+        self.reduce_tensor(num_accurate)
+        self.reduce_tensor(num_samples)
 
-        loss = metrics[0] / metrics[2]
-        perplexity = metrics[1] / metrics[2]
-        accuracy = 100 * metrics[3] / metrics[4]
+        if reset:
+            self.reset()
 
-        return {'loss': loss.item(), 'accuracy': accuracy.item(), 'perplexity': perplexity.item()}
+        return {
+            'loss': losses.mean().item(),
+            'accuracy': (num_accurate / num_samples).item(),
+            'perplexity': torch.exp(losses).mean().item(),
+        }

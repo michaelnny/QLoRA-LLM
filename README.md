@@ -33,18 +33,16 @@ Given these considerations, we decided to implement QLoRA fine-tuning for LLM us
 
 - `qlora_llm` directory contains main source code for the project.
   - `configs` directory contains all the training configurations like model type, data source, number of iterations, learning rate etc.
-  - `utils` directory contains helper modules like custom datasets, logging, tokenization, LoRA module etc.
-  - `lora.py` contains the LoRA layers.
-  - `model.py` contains the LLaMA-2 model class.
-  - `model_lora.py` contains the LLaMA-2 model class with linear layers been replaced by either LoRALinear or LoRALinear4bit.
+  - `utils` directory contains helper modules like custom datasets, logging, checkpoint etc.
+  - `models` contains the LLaMA-2 model class and LoRA layers.
   - `finetune_lora.py` run supervised fine-tuning starting from Meta's pre-trained model, using LoRA parameter efficient fine-tuning method (only supports single GPU).
   - `chat_completion.py` for chat completion, code adapted from the original LLaMA2 project.
-- `scripts` directory contains all source code for convert the model weights and build datasets for different phases.
+- `scripts` directory contains all source code for convert the model weights and build datasets.
   - `build_finetune_datasets.py` build fine-tuning datasets (save the dataset to .jsonl files).
   - `convert_meta_checkpoint.py` convert Meta pre-trained LLaMA-2 weights to support our model in plain PyTorch code, so we can load it to start fine-tuning.
   - `convert_lora_checkpoint.py` convert fine-tunned LoRA weights to a full state_dict checkpoint.
 - `datasets` directory contains the processed, tokenized datasets, which are ready to use.
-- `logs` directory contains training logs for the different phases.
+- `logs` directory contains training logs for the different runs.
 
 # QLoRA Fine-Tuning
 
